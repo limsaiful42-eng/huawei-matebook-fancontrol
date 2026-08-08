@@ -1,0 +1,11 @@
+{
+  "Name": "Huawei MateBook 14 Quiet Balanced",
+  "Points": [
+    { "MinTemperatureC": 0,  "TargetRPM": 3200 },
+    { "MinTemperatureC": 58, "TargetRPM": 3800 },
+    { "MinTemperatureC": 64, "TargetRPM": 5100 },
+    { "MinTemperatureC": 70, "TargetRPM": 6300 },
+    { "MinTemperatureC": 76, "TargetRPM": 7400 },
+    { "MinTemperatureC": 82, "TargetRPM": 9300 }
+  ]
+}

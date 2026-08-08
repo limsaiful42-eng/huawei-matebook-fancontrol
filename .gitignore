@@ -1,0 +1,7 @@
+runtime/
+quiet-power-snapshot.json
+Run-FinalValidation.ps1
+*.log
+*.csv
+*.tmp
+.vscode/

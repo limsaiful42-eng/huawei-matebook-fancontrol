@@ -1,0 +1,7 @@
+﻿{
+  "Name": "Manual Full Speed",
+  "Points": [
+    { "MinTemperatureC": 0,  "TargetRPM": 12000 },
+    { "MinTemperatureC": 100, "TargetRPM": 12000 }
+  ]
+}
