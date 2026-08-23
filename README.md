@@ -21,16 +21,19 @@
 
 从 GitHub Releases 下载 `HuaweiFanControlUI.exe`，双击并批准 UAC 即可使用，不需要安装或放置额外脚本。
 
-v1.3.0 使用偏 macOS 的浅色设计：圆角卡片、胶囊状态、简洁配色和高 DPI 自适应，同时保留 Windows 原生标题栏与窗口操作。
+v1.4.0 使用偏 macOS 的浅色设计：圆角卡片、胶囊状态、简洁配色和高 DPI 自适应，同时保留 Windows 原生标题栏与窗口操作。
 
 界面提供四个操作：
 
 - `仅监测`：只读取 CPU 温度与双风扇转速，不接管风扇。
 - `安静自动`：使用已验收的温控曲线。
 - `全速`：向 BIOS/EC 请求最高档；可设置分钟数，`0` 表示不限时。
+- `固定转速`：选择 Fan 0 和 Fan 1 的固定请求档位。默认开启“同步双风扇”；关闭后可以分别选择两个值。
 - `停止并恢复原厂`：安全退出手动模式，让 BIOS 原厂策略重新接管。
 
 运行中会实时显示 CPU 温度、Fan 0/Fan 1 物理转速、BIOS/EC 请求值和控制器日志。关闭正在控制风扇的窗口时，UI 会先等待原厂控制恢复。
+
+固定模式只提供已声明的固件档位：`3200, 3800, 5100, 6300, 7400, 9300, 9800, 10500, 11200, 11600, 12000`。手动模式是全局状态，因此控制器总是同时明确写入两把风扇；不会假设未选中的一把仍保持原厂自动。
 
 ### 命令行 EXE
 
@@ -50,6 +53,9 @@ v1.3.0 使用偏 macOS 的浅色设计：圆角卡片、胶囊状态、简洁配
 
 # 只监测一分钟，不接管风扇
 .\HuaweiFanControl.exe --monitor --minutes 1
+
+# 固定独立目标：Fan 0 请求 5100，Fan 1 请求 3800
+.\HuaweiFanControl.exe --fan0 5100 --fan1 3800
 
 # 查看全部参数
 .\HuaweiFanControl.exe --help
@@ -134,7 +140,7 @@ cd '.\huawei-matebook-fancontrol'
 
 运行日志写入本地 `runtime` 目录，该目录不会提交到 Git。仓库不包含 BIOS 镜像、ACPI 提取物、设备序列号或电源设置快照。
 
-EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.3.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
+EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.4.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
 
 ## 构建 EXE
 

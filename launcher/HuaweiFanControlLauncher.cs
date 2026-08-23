@@ -9,14 +9,14 @@ using System.Threading;
 [assembly: AssemblyDescription("Launcher for the watchdog-backed Huawei MateBook fan controller")]
 [assembly: AssemblyCompany("HuaweiFanControl community project")]
 [assembly: AssemblyProduct("Huawei MateBook Fan Control")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace HuaweiFanControl
 {
     internal static class Program
     {
-        private const string PayloadVersion = "1.3.0";
+        private const string PayloadVersion = "1.4.0";
 
         private sealed class Options
         {
@@ -28,6 +28,8 @@ namespace HuaweiFanControl
             public int SampleSeconds = 3;
             public int HysteresisC = 3;
             public int EmergencyTemperatureC = 85;
+            public int Fan0RPM;
+            public int Fan1RPM;
             public string CurvePath;
         }
 
@@ -145,13 +147,23 @@ namespace HuaweiFanControl
             controllerArguments.Add(options.EmergencyTemperatureC.ToString());
             controllerArguments.Add("-MaxMinutes");
             controllerArguments.Add(minutes.ToString());
+            if (options.Fan0RPM > 0)
+            {
+                controllerArguments.Add("-Fan0RPM");
+                controllerArguments.Add(options.Fan0RPM.ToString());
+                controllerArguments.Add("-Fan1RPM");
+                controllerArguments.Add(options.Fan1RPM.ToString());
+            }
             if (!options.MonitorOnly)
             {
                 controllerArguments.Add("-Apply");
             }
 
             Console.WriteLine("Huawei MateBook Fan Control " + PayloadVersion);
-            Console.WriteLine(options.MonitorOnly ? "Mode: monitor only" : (options.FullSpeed ? "Mode: maximum EC request" : "Mode: quiet balanced automatic curve"));
+            Console.WriteLine(options.MonitorOnly ? "Mode: monitor only" :
+                (options.FullSpeed ? "Mode: maximum EC request" :
+                (options.Fan0RPM > 0 ? "Mode: fixed targets; Fan0=" + options.Fan0RPM + ", Fan1=" + options.Fan1RPM :
+                "Mode: quiet balanced automatic curve")));
             if (minutes > 0)
             {
                 Console.WriteLine("Automatic stop: " + minutes + " minute(s)");
@@ -208,6 +220,12 @@ namespace HuaweiFanControl
                     case "--emergency-temp":
                         options.EmergencyTemperatureC = ParseRange(NextValue(args, ref index, argument), argument, 75, 95);
                         break;
+                    case "--fan0":
+                        options.Fan0RPM = ParseFanTarget(NextValue(args, ref index, argument), argument);
+                        break;
+                    case "--fan1":
+                        options.Fan1RPM = ParseFanTarget(NextValue(args, ref index, argument), argument);
+                        break;
                     case "--curve":
                         options.CurvePath = NextValue(args, ref index, argument);
                         break;
@@ -219,6 +237,15 @@ namespace HuaweiFanControl
             if (options.FullSpeed && !String.IsNullOrWhiteSpace(options.CurvePath))
             {
                 throw new ArgumentException("--full-speed and --curve cannot be used together.");
+            }
+            bool fixedTargets = options.Fan0RPM > 0 || options.Fan1RPM > 0;
+            if ((options.Fan0RPM == 0) != (options.Fan1RPM == 0))
+            {
+                throw new ArgumentException("--fan0 and --fan1 must be provided together because manual mode is global.");
+            }
+            if (fixedTargets && (options.MonitorOnly || options.FullSpeed || !String.IsNullOrWhiteSpace(options.CurvePath)))
+            {
+                throw new ArgumentException("--fan0/--fan1 cannot be combined with --monitor, --full-speed, or --curve.");
             }
             return options;
         }
@@ -239,6 +266,17 @@ namespace HuaweiFanControl
             if (!Int32.TryParse(value, out parsed) || parsed < minimum || parsed > maximum)
             {
                 throw new ArgumentException(option + " must be between " + minimum + " and " + maximum + ".");
+            }
+            return parsed;
+        }
+
+        private static int ParseFanTarget(string value, string option)
+        {
+            int parsed;
+            int[] allowed = new int[] { 3200, 3800, 5100, 6300, 7400, 9300, 9800, 10500, 11200, 11600, 12000 };
+            if (!Int32.TryParse(value, out parsed) || Array.IndexOf(allowed, parsed) < 0)
+            {
+                throw new ArgumentException(option + " must be one of: " + String.Join(", ", allowed) + ".");
             }
             return parsed;
         }
@@ -277,6 +315,7 @@ namespace HuaweiFanControl
             Console.WriteLine("With no options, runs the quiet balanced automatic curve until Ctrl+C.");
             Console.WriteLine("  --monitor                 Read sensors without controlling fans");
             Console.WriteLine("  --full-speed              Use maximum EC request (defaults to 5 minutes)");
+            Console.WriteLine("  --fan0 N --fan1 N        Use explicit fixed targets for both fans");
             Console.WriteLine("  --minutes N               Stop after N minutes; 0 means no time limit");
             Console.WriteLine("  --curve PATH              Use a custom JSON curve");
             Console.WriteLine("  --sample-seconds N        Sampling interval, 1-10 (default 3)");

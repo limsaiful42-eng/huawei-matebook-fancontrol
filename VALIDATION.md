@@ -63,4 +63,11 @@
 - 控制器确认 `ManualModeEntered=True`、`WatchdogStarted=True`、`RestoreSucceeded=True`，watchdog 收到正常停止信号，退出后无 UI、控制器或 watchdog 残留进程。
 - GUI 与 CLI 版本一致更新为 1.3.0.0，内嵌资源释放至独立的 `payload-1.3.0` 目录。
 
+### v1.4.0 双风扇独立目标验收
+
+- 高 DPI 界面中新增的“同步双风扇”开关、Fan 0/Fan 1 档位选择器、固定转速按钮与原有控件无裁切或重叠。
+- 关闭同步后，由 UI 同时写入 Fan 0 = 5100 和 Fan 1 = 3800 两个固定请求；8 个实际控制样本中，最后 5 个样本均值分别为 5160 和 3900 RPM，证明两个风扇索引可分别响应。
+- 测试温度 61–62 °C，无转速计异常；总结中 `ControlMode=FixedTargets`、`ManualModeEntered=True`、`WatchdogStarted=True`、`RestoreSucceeded=True`。
+- watchdog 收到正常停止信号，退出后无 UI、控制器或 watchdog 残留进程。GUI 和 CLI 版本均为 1.4.0.0。
+
 项目没有写未知 EC RAM、没有修改 BIOS 镜像、没有刷写固件，也没有关闭 Secure Boot 或启用测试签名。

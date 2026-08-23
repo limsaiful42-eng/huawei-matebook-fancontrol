@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-08-23
+
+- Add independent fixed BIOS/EC targets for Fan 0 and Fan 1 while always writing both targets explicitly.
+- Add an Apple-style synchronization switch, separate safe-target selectors, and an apply-fixed-speed action to the GUI.
+- Display both independent request values alongside the two physical tachometer readings.
+- Add `--fan0` and `--fan1` fixed-target options to the command-line launcher.
+- Validate Fan 0 at 5100 request / 5160 RPM and Fan 1 at 3800 request / 3900 RPM, followed by successful vendor-mode restoration.
+
 ## 1.3.0 - 2026-08-23
 
 - Redesign the GUI with a macOS-inspired light canvas, rounded cards, status pills, restrained system colors, and a custom fan app mark.

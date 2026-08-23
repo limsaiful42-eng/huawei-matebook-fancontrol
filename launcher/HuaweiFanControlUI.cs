@@ -12,8 +12,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Graphical interface for the watchdog-backed Huawei MateBook fan controller")]
 [assembly: AssemblyCompany("HuaweiFanControl community project")]
 [assembly: AssemblyProduct("Huawei MateBook Fan Control")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace HuaweiFanControl
 {
@@ -67,6 +67,7 @@ namespace HuaweiFanControl
         protected override void OnPaint(PaintEventArgs args)
         {
             args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            args.Graphics.Clear(Parent == null ? SystemColors.Control : Parent.BackColor);
             Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
             using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, CornerRadius))
             using (SolidBrush fill = new SolidBrush(FillColor))
@@ -133,6 +134,7 @@ namespace HuaweiFanControl
         protected override void OnPaint(PaintEventArgs args)
         {
             args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            args.Graphics.Clear(Parent == null ? SystemColors.Control : Parent.BackColor);
             Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
             Color fillColor = Enabled ? (hovered ? hoverColor : normalColor) : Color.FromArgb(228, 228, 232);
             Color textColor = Enabled ? ForeColor : Color.FromArgb(142, 142, 147);
@@ -175,6 +177,45 @@ namespace HuaweiFanControl
         }
     }
 
+    internal sealed class ToggleSwitch : CheckBox
+    {
+        internal ToggleSwitch()
+        {
+            AutoSize = false;
+            Size = new Size(48, 28);
+            Cursor = Cursors.Hand;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnCheckedChanged(EventArgs args)
+        {
+            Invalidate();
+            base.OnCheckedChanged(args);
+        }
+
+        protected override void OnPaint(PaintEventArgs args)
+        {
+            args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            args.Graphics.Clear(BackColor);
+            Rectangle trackBounds = new Rectangle(0, 2, Width - 1, Height - 5);
+            Color trackColor = Enabled
+                ? (Checked ? Color.FromArgb(52, 199, 89) : Color.FromArgb(209, 209, 214))
+                : Color.FromArgb(229, 229, 234);
+            using (GraphicsPath track = AppleGeometry.RoundedRectangle(trackBounds, trackBounds.Height / 2))
+            using (SolidBrush trackBrush = new SolidBrush(trackColor))
+            {
+                args.Graphics.FillPath(trackBrush, track);
+            }
+            int knobSize = Height - 9;
+            int knobX = Checked ? Width - knobSize - 5 : 4;
+            using (SolidBrush knob = new SolidBrush(Color.White))
+            {
+                args.Graphics.FillEllipse(knob, knobX, 4, knobSize, knobSize);
+            }
+        }
+    }
+
     internal sealed class FanAppIcon : Control
     {
         internal FanAppIcon()
@@ -212,7 +253,7 @@ namespace HuaweiFanControl
 
     internal sealed class MainForm : Form
     {
-        private const string PayloadVersion = "1.3.0";
+        private const string PayloadVersion = "1.4.0";
         private static readonly Color Navy = Color.FromArgb(29, 29, 31);
         private static readonly Color Blue = Color.FromArgb(0, 113, 227);
         private static readonly Color Green = Color.FromArgb(19, 122, 78);
@@ -221,9 +262,14 @@ namespace HuaweiFanControl
         private static readonly Color Surface = Color.White;
         private static readonly Color Canvas = Color.FromArgb(245, 245, 247);
         private static readonly Color Muted = Color.FromArgb(110, 110, 115);
+        private static readonly Color Purple = Color.FromArgb(94, 92, 230);
+        private static readonly int[] FanTargets = new int[] { 3200, 3800, 5100, 6300, 7400, 9300, 9800, 10500, 11200, 11600, 12000 };
 
         private readonly Regex samplePattern = new Regex(
             @"(?<time>\d{2}:\d{2}:\d{2})\s*\|\s*(?<temp>-?\d+)\s*C\s*\|\s*Request\s+(?<request>\d+)\s*\|\s*Fan0\s+(?<fan0>\d+)\s*\|\s*Fan1\s+(?<fan1>\d+)",
+            RegexOptions.Compiled);
+        private readonly Regex independentSamplePattern = new Regex(
+            @"(?<time>\d{2}:\d{2}:\d{2})\s*\|\s*(?<temp>-?\d+)\s*C\s*\|\s*Request\s+F0\s+(?<request0>\d+)\s+F1\s+(?<request1>\d+)\s*\|\s*Fan0\s+(?<fan0>\d+)\s*\|\s*Fan1\s+(?<fan1>\d+)",
             RegexOptions.Compiled);
         private readonly Regex ansiPattern = new Regex(@"\x1B\[[0-?]*[ -/]*[@-~]", RegexOptions.Compiled);
 
@@ -236,7 +282,11 @@ namespace HuaweiFanControl
         private Button monitorButton;
         private Button quietButton;
         private Button fullButton;
+        private Button independentButton;
         private Button stopButton;
+        private ToggleSwitch syncFansSwitch;
+        private ComboBox fan0TargetSelector;
+        private ComboBox fan1TargetSelector;
         private NumericUpDown fullSpeedMinutes;
         private NumericUpDown emergencyTemperature;
         private Process controllerProcess;
@@ -281,11 +331,18 @@ namespace HuaweiFanControl
             string requestedMode = null;
             if (String.Equals(args[0], "--ui-test-monitor", StringComparison.OrdinalIgnoreCase)) requestedMode = "Monitor";
             if (String.Equals(args[0], "--ui-test-quiet", StringComparison.OrdinalIgnoreCase)) requestedMode = "Quiet";
+            if (String.Equals(args[0], "--ui-test-independent", StringComparison.OrdinalIgnoreCase)) requestedMode = "Independent";
             int seconds;
             if (requestedMode == null || !Int32.TryParse(args[1], out seconds) || seconds < 5 || seconds > 300) return;
 
             Shown += delegate
             {
+                if (requestedMode == "Independent")
+                {
+                    syncFansSwitch.Checked = false;
+                    fan0TargetSelector.SelectedIndex = Array.IndexOf(FanTargets, 5100);
+                    fan1TargetSelector.SelectedIndex = Array.IndexOf(FanTargets, 3800);
+                }
                 AppendLog("启动 UI 定时验收：" + requestedMode + " / " + seconds + " 秒。", false);
                 StartController(requestedMode);
                 Timer validationTimer = new Timer();
@@ -314,7 +371,7 @@ namespace HuaweiFanControl
             root.RowCount = 5;
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 220));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             Controls.Add(root);
@@ -345,7 +402,7 @@ namespace HuaweiFanControl
             title.Location = new Point(98, 18);
 
             Label subtitle = new Label();
-            subtitle.Text = "Huawei MateBook 14 2024  ·  BIOS/EC  ·  v1.3.0";
+            subtitle.Text = "Huawei MateBook 14 2024  ·  BIOS/EC  ·  v1.4.0";
             subtitle.ForeColor = Muted;
             subtitle.Font = new Font("Microsoft YaHei UI", 9.2f);
             subtitle.AutoSize = true;
@@ -385,7 +442,7 @@ namespace HuaweiFanControl
             table.Controls.Add(CreateMetricCard("CPU 温度", "-- °C", "实时温度", Blue, out temperatureValue), 0, 0);
             table.Controls.Add(CreateMetricCard("风扇 0", "-- RPM", "物理转速", Color.FromArgb(94, 92, 230), out fan0Value), 1, 0);
             table.Controls.Add(CreateMetricCard("风扇 1", "-- RPM", "物理转速", Color.FromArgb(94, 92, 230), out fan1Value), 2, 0);
-            table.Controls.Add(CreateMetricCard("BIOS/EC 请求", "-- RPM", "控制目标", Orange, out requestValue), 3, 0);
+            table.Controls.Add(CreateMetricCard("BIOS/EC 请求", "-- RPM", "Fan 0 / Fan 1 目标", Orange, out requestValue), 3, 0);
             return table;
         }
 
@@ -433,8 +490,8 @@ namespace HuaweiFanControl
         {
             RoundedPanel shell = new RoundedPanel();
             shell.Dock = DockStyle.Fill;
-            shell.Margin = new Padding(29, 2, 29, 10);
-            shell.Padding = new Padding(20, 14, 20, 12);
+            shell.Margin = new Padding(29, 2, 29, 8);
+            shell.Padding = new Padding(20, 12, 20, 11);
             shell.FillColor = Surface;
             shell.OutlineColor = Color.FromArgb(232, 232, 236);
             shell.CornerRadius = 22;
@@ -443,14 +500,15 @@ namespace HuaweiFanControl
             container.Dock = DockStyle.Fill;
             container.BackColor = Surface;
             container.ColumnCount = 2;
-            container.RowCount = 2;
+            container.RowCount = 3;
             container.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             container.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
-            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
+            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
             container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             Label sectionTitle = new Label();
-            sectionTitle.Text = "控制模式     选择预设后实时接管，停止时自动恢复原厂控制";
+            sectionTitle.Text = "控制模式     温控预设或双风扇固定目标，停止时自动恢复原厂控制";
             sectionTitle.Font = new Font("Microsoft YaHei UI", 10.2f, FontStyle.Bold);
             sectionTitle.ForeColor = Navy;
             sectionTitle.Dock = DockStyle.Fill;
@@ -522,8 +580,108 @@ namespace HuaweiFanControl
             container.SetColumnSpan(sectionTitle, 2);
             container.Controls.Add(buttons, 0, 1);
             container.Controls.Add(settings, 1, 1);
+            Control independentControls = CreateIndependentControls();
+            container.Controls.Add(independentControls, 0, 2);
+            container.SetColumnSpan(independentControls, 2);
             shell.Controls.Add(container);
             return shell;
+        }
+
+        private Control CreateIndependentControls()
+        {
+            RoundedPanel panel = new RoundedPanel();
+            panel.Dock = DockStyle.Fill;
+            panel.Margin = new Padding(2, 4, 2, 0);
+            panel.Padding = new Padding(11, 8, 11, 6);
+            panel.FillColor = Color.FromArgb(248, 248, 250);
+            panel.OutlineColor = Color.FromArgb(236, 236, 240);
+            panel.CornerRadius = 15;
+
+            FlowLayoutPanel flow = new FlowLayoutPanel();
+            flow.Dock = DockStyle.Fill;
+            flow.WrapContents = false;
+            flow.BackColor = panel.FillColor;
+
+            Label fixedLabel = new Label();
+            fixedLabel.Text = "固定转速";
+            fixedLabel.ForeColor = Navy;
+            fixedLabel.Font = new Font("Microsoft YaHei UI", 9.2f, FontStyle.Bold);
+            fixedLabel.Size = new Size(76, 40);
+            fixedLabel.TextAlign = ContentAlignment.MiddleLeft;
+            fixedLabel.BackColor = panel.FillColor;
+
+            Label syncLabel = new Label();
+            syncLabel.Text = "同步双风扇";
+            syncLabel.ForeColor = Muted;
+            syncLabel.Size = new Size(82, 40);
+            syncLabel.TextAlign = ContentAlignment.MiddleRight;
+            syncLabel.BackColor = panel.FillColor;
+
+            syncFansSwitch = new ToggleSwitch();
+            syncFansSwitch.Checked = true;
+            syncFansSwitch.BackColor = panel.FillColor;
+            syncFansSwitch.Margin = new Padding(6, 6, 16, 0);
+
+            Label fan0Label = new Label();
+            fan0Label.Text = "Fan 0";
+            fan0Label.ForeColor = Muted;
+            fan0Label.Size = new Size(46, 40);
+            fan0Label.TextAlign = ContentAlignment.MiddleRight;
+            fan0Label.BackColor = panel.FillColor;
+
+            fan0TargetSelector = CreateFanTargetSelector();
+            fan0TargetSelector.Margin = new Padding(5, 7, 15, 0);
+
+            Label fan1Label = new Label();
+            fan1Label.Text = "Fan 1";
+            fan1Label.ForeColor = Muted;
+            fan1Label.Size = new Size(46, 40);
+            fan1Label.TextAlign = ContentAlignment.MiddleRight;
+            fan1Label.BackColor = panel.FillColor;
+
+            fan1TargetSelector = CreateFanTargetSelector();
+            fan1TargetSelector.Margin = new Padding(5, 7, 17, 0);
+            fan1TargetSelector.Enabled = false;
+
+            independentButton = CreateButton("应用固定转速", Purple, Color.FromArgb(74, 72, 210), Color.White, 132);
+            independentButton.Margin = new Padding(4, 2, 4, 2);
+            independentButton.Click += delegate { StartController("Independent"); };
+            syncFansSwitch.CheckedChanged += delegate { UpdateIndependentSelectorState(); };
+            fan0TargetSelector.SelectedIndexChanged += delegate
+            {
+                if (syncFansSwitch.Checked && fan1TargetSelector.SelectedIndex != fan0TargetSelector.SelectedIndex)
+                {
+                    fan1TargetSelector.SelectedIndex = fan0TargetSelector.SelectedIndex;
+                }
+            };
+
+            flow.Controls.Add(fixedLabel);
+            flow.Controls.Add(syncLabel);
+            flow.Controls.Add(syncFansSwitch);
+            flow.Controls.Add(fan0Label);
+            flow.Controls.Add(fan0TargetSelector);
+            flow.Controls.Add(fan1Label);
+            flow.Controls.Add(fan1TargetSelector);
+            flow.Controls.Add(independentButton);
+            panel.Controls.Add(flow);
+            return panel;
+        }
+
+        private ComboBox CreateFanTargetSelector()
+        {
+            ComboBox selector = new ComboBox();
+            selector.DropDownStyle = ComboBoxStyle.DropDownList;
+            selector.FlatStyle = FlatStyle.Flat;
+            selector.BackColor = Surface;
+            selector.ForeColor = Navy;
+            selector.Font = new Font("Segoe UI", 9f);
+            selector.Size = new Size(92, 30);
+            foreach (int target in FanTargets)
+            {
+                selector.Items.Add(target + " RPM");
+            }
+            selector.SelectedIndex = Array.IndexOf(FanTargets, 3800);
+            return selector;
         }
 
         private Button CreateButton(string text, Color background, Color hover, Color foreground, int width)
@@ -648,14 +806,39 @@ namespace HuaweiFanControl
             arguments.Add(Quote(stopSignalPath));
             arguments.Add("-MaxMinutes");
             arguments.Add(mode == "Full" ? ((int)fullSpeedMinutes.Value).ToString() : "0");
+            if (mode == "Independent")
+            {
+                arguments.Add("-Fan0RPM");
+                arguments.Add(GetSelectedFanTarget(fan0TargetSelector).ToString());
+                arguments.Add("-Fan1RPM");
+                arguments.Add(GetSelectedFanTarget(fan1TargetSelector).ToString());
+            }
             if (mode != "Monitor")
             {
                 arguments.Add("-Apply");
             }
 
-            string displayMode = mode == "Monitor" ? "仅监测" : (mode == "Full" ? "全速请求" : "安静自动");
-            Color displayColor = mode == "Monitor" ? Muted : (mode == "Full" ? Orange : Blue);
+            string displayMode = mode == "Monitor" ? "仅监测" :
+                (mode == "Full" ? "全速请求" : (mode == "Independent" ? "固定独立控制" : "安静自动"));
+            Color displayColor = mode == "Monitor" ? Muted :
+                (mode == "Full" ? Orange : (mode == "Independent" ? Purple : Blue));
             StartPowerShell(arguments, displayMode, displayColor);
+        }
+
+        private static int GetSelectedFanTarget(ComboBox selector)
+        {
+            int index = selector.SelectedIndex;
+            if (index < 0 || index >= FanTargets.Length) return 3800;
+            return FanTargets[index];
+        }
+
+        private void UpdateIndependentSelectorState()
+        {
+            if (syncFansSwitch.Checked)
+            {
+                fan1TargetSelector.SelectedIndex = fan0TargetSelector.SelectedIndex;
+            }
+            fan1TargetSelector.Enabled = !syncFansSwitch.Checked && !IsControllerRunning();
         }
 
         private void RunVendorRestore()
@@ -795,18 +978,31 @@ namespace HuaweiFanControl
             string line = ansiPattern.Replace(rawLine, String.Empty).Trim();
             if (line.Length == 0) return;
             Match match = samplePattern.Match(line);
-            if (match.Success)
+            Match independentMatch = independentSamplePattern.Match(line);
+            bool isSample = match.Success || independentMatch.Success;
+            Match metricMatch = independentMatch.Success ? independentMatch : match;
+            if (isSample)
             {
                 int temperature;
-                Int32.TryParse(match.Groups["temp"].Value, out temperature);
-                temperatureValue.Text = match.Groups["temp"].Value + " °C";
+                Int32.TryParse(metricMatch.Groups["temp"].Value, out temperature);
+                temperatureValue.Text = metricMatch.Groups["temp"].Value + " °C";
                 temperatureValue.ForeColor = temperature >= (int)emergencyTemperature.Value - 5 ? Red : Navy;
-                fan0Value.Text = match.Groups["fan0"].Value + " RPM";
-                fan1Value.Text = match.Groups["fan1"].Value + " RPM";
-                requestValue.Text = match.Groups["request"].Value + " RPM";
+                fan0Value.Text = metricMatch.Groups["fan0"].Value + " RPM";
+                fan1Value.Text = metricMatch.Groups["fan1"].Value + " RPM";
+                if (independentMatch.Success)
+                {
+                    SetRequestValueFont(15.5f);
+                    requestValue.Text = "F0 " + independentMatch.Groups["request0"].Value + "  ·  F1 " +
+                        independentMatch.Groups["request1"].Value;
+                }
+                else
+                {
+                    SetRequestValueFont(22f);
+                    requestValue.Text = match.Groups["request"].Value + " RPM";
+                }
             }
 
-            string formatted = match.Success
+            string formatted = isSample
                 ? line + Environment.NewLine
                 : DateTime.Now.ToString("HH:mm:ss") + "  " + line + Environment.NewLine;
             if (logBox.TextLength > 50000)
@@ -818,6 +1014,14 @@ namespace HuaweiFanControl
             logBox.AppendText(formatted);
             logBox.SelectionStart = logBox.TextLength;
             logBox.ScrollToCaret();
+        }
+
+        private void SetRequestValueFont(float size)
+        {
+            if (Math.Abs(requestValue.Font.Size - size) < 0.1f) return;
+            Font previous = requestValue.Font;
+            requestValue.Font = new Font("Segoe UI Variable Display", size, FontStyle.Bold);
+            previous.Dispose();
         }
 
         private void SetStatus(string text, Color color)
@@ -836,8 +1040,12 @@ namespace HuaweiFanControl
             monitorButton.Enabled = !running;
             quietButton.Enabled = !running;
             fullButton.Enabled = !running;
+            independentButton.Enabled = !running;
             fullSpeedMinutes.Enabled = !running;
             emergencyTemperature.Enabled = !running;
+            syncFansSwitch.Enabled = !running;
+            fan0TargetSelector.Enabled = !running;
+            fan1TargetSelector.Enabled = !running && !syncFansSwitch.Checked;
             stopButton.Enabled = true;
             stopButton.Text = running ? "停止并恢复原厂" : "强制恢复原厂";
         }
@@ -847,6 +1055,10 @@ namespace HuaweiFanControl
             monitorButton.Enabled = enabled;
             quietButton.Enabled = enabled;
             fullButton.Enabled = enabled;
+            independentButton.Enabled = enabled;
+            syncFansSwitch.Enabled = enabled;
+            fan0TargetSelector.Enabled = enabled;
+            fan1TargetSelector.Enabled = enabled && !syncFansSwitch.Checked;
             stopButton.Enabled = enabled;
         }
 

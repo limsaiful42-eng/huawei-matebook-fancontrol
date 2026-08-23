@@ -16,6 +16,12 @@ param(
     [ValidateRange(75, 95)]
     [int] $EmergencyTemperatureC = 85,
 
+    [ValidateSet(0, 3200, 3800, 5100, 6300, 7400, 9300, 9800, 10500, 11200, 11600, 12000)]
+    [int] $Fan0RPM = 0,
+
+    [ValidateSet(0, 3200, 3800, 5100, 6300, 7400, 9300, 9800, 10500, 11200, 11600, 12000)]
+    [int] $Fan1RPM = 0,
+
     [string] $StopSignalPath,
 
     [switch] $Apply
@@ -116,7 +122,22 @@ if ($Apply -and -not (Test-IsAdministrator)) {
     throw 'Apply mode must be run from an Administrator PowerShell window.'
 }
 
-$curve = Import-FanCurve -Path $CurvePath
+$fixedTargetMode = ($Fan0RPM -ne 0 -or $Fan1RPM -ne 0)
+if (($Fan0RPM -eq 0) -xor ($Fan1RPM -eq 0)) {
+    throw 'Fixed control requires both -Fan0RPM and -Fan1RPM. Manual mode is global, so both fan targets must be explicit.'
+}
+if ($fixedTargetMode -and -not $Apply) {
+    throw 'Fixed fan targets require -Apply.'
+}
+$curve = if ($fixedTargetMode) {
+    [pscustomobject]@{
+        Name = "Fixed targets: Fan0=$Fan0RPM RPM, Fan1=$Fan1RPM RPM"
+        Points = @()
+    }
+}
+else {
+    Import-FanCurve -Path $CurvePath
+}
 $oemWmi = Get-CimInstance -Namespace 'root\wmi' -ClassName OemWMIMethod |
     Where-Object { $_.InstanceName -eq 'ACPI\PNP0C14\HWMI_0' } |
     Select-Object -First 1
@@ -170,9 +191,18 @@ function Set-HuaweiFanRpm {
 }
 
 function Set-HuaweiBothFans([int] $RPM) {
-    Set-HuaweiFanRpm -Fan 0 -RPM $RPM
+    Set-HuaweiFansRpm -Fan0TargetRPM $RPM -Fan1TargetRPM $RPM
+}
+
+function Set-HuaweiFansRpm {
+    param(
+        [int] $Fan0TargetRPM,
+        [int] $Fan1TargetRPM
+    )
+
+    Set-HuaweiFanRpm -Fan 0 -RPM $Fan0TargetRPM
     $script:manualModeEntered = $true
-    Set-HuaweiFanRpm -Fan 1 -RPM $RPM
+    Set-HuaweiFanRpm -Fan 1 -RPM $Fan1TargetRPM
     $script:controlsApplied++
 }
 
@@ -242,28 +272,26 @@ try {
         }
 
         $sample = Get-HuaweiFanSample
-        $desiredIndex = Get-DesiredPointIndex -TemperatureC $sample.TemperatureC -Points $curve.Points
         $controlChanged = $false
-
-        if ($currentPointIndex -lt 0) {
-            $currentPointIndex = $desiredIndex
-            if ($Apply) {
-                Set-HuaweiBothFans -RPM ([int] $curve.Points[$currentPointIndex].TargetRPM)
+        if ($fixedTargetMode) {
+            $targetFan0RPM = $Fan0RPM
+            $targetFan1RPM = $Fan1RPM
+            if ($currentPointIndex -lt 0) {
+                $currentPointIndex = 0
+                Set-HuaweiFansRpm -Fan0TargetRPM $targetFan0RPM -Fan1TargetRPM $targetFan1RPM
                 $controlChanged = $true
             }
         }
-        elseif ($desiredIndex -gt $currentPointIndex) {
-            $currentPointIndex = $desiredIndex
-            $downshiftSamples = 0
-            if ($Apply) {
-                Set-HuaweiBothFans -RPM ([int] $curve.Points[$currentPointIndex].TargetRPM)
-                $controlChanged = $true
+        else {
+            $desiredIndex = Get-DesiredPointIndex -TemperatureC $sample.TemperatureC -Points $curve.Points
+            if ($currentPointIndex -lt 0) {
+                $currentPointIndex = $desiredIndex
+                if ($Apply) {
+                    Set-HuaweiBothFans -RPM ([int] $curve.Points[$currentPointIndex].TargetRPM)
+                    $controlChanged = $true
+                }
             }
-        }
-        elseif ($desiredIndex -lt $currentPointIndex -and
-            $sample.TemperatureC -le ([int] $curve.Points[$currentPointIndex].MinTemperatureC - $HysteresisC)) {
-            $downshiftSamples++
-            if ($downshiftSamples -ge 3) {
+            elseif ($desiredIndex -gt $currentPointIndex) {
                 $currentPointIndex = $desiredIndex
                 $downshiftSamples = 0
                 if ($Apply) {
@@ -271,25 +299,47 @@ try {
                     $controlChanged = $true
                 }
             }
-        }
-        else {
-            $downshiftSamples = 0
+            elseif ($desiredIndex -lt $currentPointIndex -and
+                $sample.TemperatureC -le ([int] $curve.Points[$currentPointIndex].MinTemperatureC - $HysteresisC)) {
+                $downshiftSamples++
+                if ($downshiftSamples -ge 3) {
+                    $currentPointIndex = $desiredIndex
+                    $downshiftSamples = 0
+                    if ($Apply) {
+                        Set-HuaweiBothFans -RPM ([int] $curve.Points[$currentPointIndex].TargetRPM)
+                        $controlChanged = $true
+                    }
+                }
+            }
+            else {
+                $downshiftSamples = 0
+            }
+            $targetFan0RPM = [int] $curve.Points[$currentPointIndex].TargetRPM
+            $targetFan1RPM = $targetFan0RPM
         }
 
-        $targetRpm = [int] $curve.Points[$currentPointIndex].TargetRPM
         $row = [pscustomobject]@{
             Timestamp = Get-Date
             TemperatureC = $sample.TemperatureC
-            RequestedRPM = $targetRpm
+            RequestedRPM = if ($targetFan0RPM -eq $targetFan1RPM) { $targetFan0RPM } else { $null }
+            RequestedFan0RPM = $targetFan0RPM
+            RequestedFan1RPM = $targetFan1RPM
             Fan0RPM = $sample.Fan0RPM
             Fan1RPM = $sample.Fan1RPM
             ControlChanged = $controlChanged
             ApplyMode = [bool] $Apply
         }
         $rows.Add($row)
-        Write-Host ('{0:HH:mm:ss} | {1,2} C | Request {2,5} | Fan0 {3,5} | Fan1 {4,5}{5}' -f
-            $row.Timestamp, $row.TemperatureC, $row.RequestedRPM, $row.Fan0RPM, $row.Fan1RPM,
-            $(if ($controlChanged) { ' | applied' } else { '' }))
+        if ($row.RequestedRPM -ne $null) {
+            Write-Host ('{0:HH:mm:ss} | {1,2} C | Request {2,5} | Fan0 {3,5} | Fan1 {4,5}{5}' -f
+                $row.Timestamp, $row.TemperatureC, $row.RequestedRPM, $row.Fan0RPM, $row.Fan1RPM,
+                $(if ($controlChanged) { ' | applied' } else { '' }))
+        }
+        else {
+            Write-Host ('{0:HH:mm:ss} | {1,2} C | Request F0 {2,5} F1 {3,5} | Fan0 {4,5} | Fan1 {5,5}{6}' -f
+                $row.Timestamp, $row.TemperatureC, $row.RequestedFan0RPM, $row.RequestedFan1RPM,
+                $row.Fan0RPM, $row.Fan1RPM, $(if ($controlChanged) { ' | applied' } else { '' }))
+        }
 
         if ($sample.TemperatureC -ge $EmergencyTemperatureC) {
             throw "Emergency temperature threshold reached: $($sample.TemperatureC) C."
@@ -355,6 +405,7 @@ if ($rows.Count -gt 0) {
 $summary = [ordered]@{
     Timestamp = (Get-Date).ToString('o')
     ApplyMode = [bool] $Apply
+    ControlMode = if ($fixedTargetMode) { 'FixedTargets' } else { 'TemperatureCurve' }
     CurveName = $curve.Name
     Samples = $rows.Count
     ControlsApplied = $controlsApplied
@@ -363,7 +414,9 @@ $summary = [ordered]@{
     WatchdogStarted = $watchdogStarted
     TemperatureMinC = if ($rows.Count) { ($rows | Measure-Object TemperatureC -Minimum).Minimum } else { $null }
     TemperatureMaxC = if ($rows.Count) { ($rows | Measure-Object TemperatureC -Maximum).Maximum } else { $null }
-    EndRequestedRPM = if ($rows.Count) { [int] $rows[-1].RequestedRPM } else { $null }
+    EndRequestedRPM = if ($rows.Count -and $null -ne $rows[-1].RequestedRPM) { [int] $rows[-1].RequestedRPM } else { $null }
+    EndRequestedFan0RPM = if ($rows.Count) { [int] $rows[-1].RequestedFan0RPM } else { $null }
+    EndRequestedFan1RPM = if ($rows.Count) { [int] $rows[-1].RequestedFan1RPM } else { $null }
     EndFan0RPM = if ($rows.Count) { [int] $rows[-1].Fan0RPM } else { $null }
     EndFan1RPM = if ($rows.Count) { [int] $rows[-1].Fan1RPM } else { $null }
     Error = $controllerError
