@@ -263,15 +263,15 @@ try {
         $row = [pscustomobject]@{
             Timestamp = Get-Date
             TemperatureC = $sample.TemperatureC
-            TargetRPM = $targetRpm
+            RequestedRPM = $targetRpm
             Fan0RPM = $sample.Fan0RPM
             Fan1RPM = $sample.Fan1RPM
             ControlChanged = $controlChanged
             ApplyMode = [bool] $Apply
         }
         $rows.Add($row)
-        Write-Host ('{0:HH:mm:ss} | {1,2} C | Target {2,5} | Fan0 {3,5} | Fan1 {4,5}{5}' -f
-            $row.Timestamp, $row.TemperatureC, $row.TargetRPM, $row.Fan0RPM, $row.Fan1RPM,
+        Write-Host ('{0:HH:mm:ss} | {1,2} C | Request {2,5} | Fan0 {3,5} | Fan1 {4,5}{5}' -f
+            $row.Timestamp, $row.TemperatureC, $row.RequestedRPM, $row.Fan0RPM, $row.Fan1RPM,
             $(if ($controlChanged) { ' | applied' } else { '' }))
 
         if ($sample.TemperatureC -ge $EmergencyTemperatureC) {
@@ -339,7 +339,7 @@ $summary = [ordered]@{
     WatchdogStarted = $watchdogStarted
     TemperatureMinC = if ($rows.Count) { ($rows | Measure-Object TemperatureC -Minimum).Minimum } else { $null }
     TemperatureMaxC = if ($rows.Count) { ($rows | Measure-Object TemperatureC -Maximum).Maximum } else { $null }
-    EndTargetRPM = if ($rows.Count) { [int] $rows[-1].TargetRPM } else { $null }
+    EndRequestedRPM = if ($rows.Count) { [int] $rows[-1].RequestedRPM } else { $null }
     EndFan0RPM = if ($rows.Count) { [int] $rows[-1].Fan0RPM } else { $null }
     EndFan1RPM = if ($rows.Count) { [int] $rows[-1].Fan1RPM } else { $null }
     Error = $controllerError

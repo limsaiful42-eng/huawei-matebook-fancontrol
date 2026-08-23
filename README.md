@@ -43,6 +43,8 @@ cd '.\huawei-matebook-fancontrol'
 .\HuaweiFan-AutoController.ps1 -Apply -CurvePath '.\full-speed-curve.json' -MaxMinutes 5
 ```
 
+这里显示的 `Request 12000` 是写给 BIOS/EC 的请求参数，不是转速计保证值。在实测机器上，物理风扇从 7400 请求提高到 12000 请求后只增加约 0–2%，稳定在约 7000–7200 RPM，偶发峰值约 7600 RPM。全速曲线仍保留 12000 请求，以获得可能的最高输出。
+
 不要同时启动多个控制器实例。
 
 ## 默认曲线
@@ -69,6 +71,12 @@ cd '.\huawei-matebook-fancontrol'
 - 强制结束主控制器的整个 PowerShell 宿主、强制关机或固件异常仍属于无法完全消除的风险；运行时不要删除 watchdog 进程。
 
 项目附带 `Test-WatchdogFailover.ps1`，它会短暂提高转速并模拟主进程丢失，用于验证 watchdog 能独立恢复厂商自动模式；日常运行不需要执行它。
+
+`Test-FanTargetCalibration.ps1` 会依次测试 7400、9300、12000 三个固件请求值，并计算每档最后五个样本的物理转速平均值。测试会持续约一分钟并短暂拉高风扇；仅在管理员 PowerShell 中、确认没有其他控制器运行时使用：
+
+```powershell
+.\Test-FanTargetCalibration.ps1
+```
 
 ## 自定义
 

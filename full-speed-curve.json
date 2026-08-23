@@ -1,5 +1,5 @@
 ﻿{
-  "Name": "Manual Full Speed",
+  "Name": "Maximum EC Request (physical fan saturation expected)",
   "Points": [
     { "MinTemperatureC": 0,  "TargetRPM": 12000 },
     { "MinTemperatureC": 100, "TargetRPM": 12000 }
