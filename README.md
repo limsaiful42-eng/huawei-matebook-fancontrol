@@ -17,6 +17,33 @@
 
 ## 运行
 
+### 单文件 EXE
+
+从 GitHub Releases 下载 `HuaweiFanControl.exe`，双击后批准 UAC 即可运行安静自动曲线。EXE 内嵌控制器、watchdog 和默认曲线，不需要把 PowerShell 脚本放在旁边。
+
+常用命令：
+
+```powershell
+# 安静自动曲线，持续运行到 Ctrl+C
+.\HuaweiFanControl.exe
+
+# 最高 EC 请求，默认五分钟后恢复厂商控制
+.\HuaweiFanControl.exe --full-speed
+
+# 最高 EC 请求，运行十分钟
+.\HuaweiFanControl.exe --full-speed --minutes 10
+
+# 只监测一分钟，不接管风扇
+.\HuaweiFanControl.exe --monitor --minutes 1
+
+# 查看全部参数
+.\HuaweiFanControl.exe --help
+```
+
+EXE 的应用清单要求管理员权限，这是读取和调用 BIOS WMI 接口所必需的。当前发布文件没有 Authenticode 商业代码签名，Windows 可能显示“未知发布者”；请只从本仓库 Releases 下载，并使用随附的 `.sha256` 文件核对哈希。
+
+### PowerShell 源码
+
 在管理员 PowerShell 中进入克隆后的仓库目录：
 
 ```powershell
@@ -91,3 +118,15 @@ cd '.\huawei-matebook-fancontrol'
 ## 数据与隐私
 
 运行日志写入本地 `runtime` 目录，该目录不会提交到 Git。仓库不包含 BIOS 镜像、ACPI 提取物、设备序列号或电源设置快照。
+
+EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.1.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
+
+## 构建 EXE
+
+Windows 自带 .NET Framework C# 编译器即可构建，不需要下载第三方 PowerShell 打包器：
+
+```powershell
+.\Build-Exe.ps1
+```
+
+输出位于 `dist\HuaweiFanControl.exe`，同时生成 SHA-256 校验文件。启动器源码和管理员权限清单位于 `launcher` 目录；构建时会把当前控制器、watchdog 和两条曲线作为资源嵌入 EXE。

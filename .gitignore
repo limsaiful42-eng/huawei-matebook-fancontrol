@@ -5,3 +5,4 @@ Run-FinalValidation.ps1
 *.csv
 *.tmp
 .vscode/
+dist/
