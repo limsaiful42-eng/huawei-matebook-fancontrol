@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0 - 2026-08-23
+
+- Redesign the GUI with a macOS-inspired light canvas, rounded cards, status pills, restrained system colors, and a custom fan app mark.
+- Add high-DPI-safe metric, control, settings, and activity layouts while retaining the native Windows title bar and UAC behavior.
+- Improve running and disabled control states and switch the activity log to a light appearance.
+- Revalidate active quiet control with 13 samples, watchdog startup, automatic safe stop, and successful vendor-mode restoration.
+
 ## 1.2.0 - 2026-08-23
 
 - Add a single-file Windows Forms GUI with live CPU temperature, both fan tachometers, BIOS/EC request, and logs.

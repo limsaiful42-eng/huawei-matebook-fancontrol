@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
@@ -11,8 +12,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Graphical interface for the watchdog-backed Huawei MateBook fan controller")]
 [assembly: AssemblyCompany("HuaweiFanControl community project")]
 [assembly: AssemblyProduct("Huawei MateBook Fan Control")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace HuaweiFanControl
 {
@@ -27,24 +28,206 @@ namespace HuaweiFanControl
         }
     }
 
+    internal static class AppleGeometry
+    {
+        internal static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        {
+            GraphicsPath path = new GraphicsPath();
+            int diameter = Math.Max(2, Math.Min(radius * 2, Math.Min(bounds.Width, bounds.Height)));
+            Rectangle arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
+            path.AddArc(arc, 180, 90);
+            arc.X = bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = bounds.Left;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+
+    internal sealed class RoundedPanel : Panel
+    {
+        internal int CornerRadius { get; set; }
+        internal Color FillColor { get; set; }
+        internal Color OutlineColor { get; set; }
+
+        internal RoundedPanel()
+        {
+            CornerRadius = 18;
+            FillColor = Color.White;
+            OutlineColor = Color.FromArgb(228, 228, 232);
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs args)
+        {
+            args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
+            using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, CornerRadius))
+            using (SolidBrush fill = new SolidBrush(FillColor))
+            using (Pen outline = new Pen(OutlineColor))
+            {
+                args.Graphics.FillPath(fill, path);
+                args.Graphics.DrawPath(outline, path);
+            }
+        }
+    }
+
+    internal sealed class RoundedButton : Button
+    {
+        private Color normalColor;
+        private Color hoverColor;
+        private bool hovered;
+
+        internal int CornerRadius { get; set; }
+
+        internal RoundedButton()
+        {
+            CornerRadius = 14;
+            FlatStyle = FlatStyle.Flat;
+            FlatAppearance.BorderSize = 0;
+            UseVisualStyleBackColor = false;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        internal void SetPalette(Color background, Color hover, Color foreground)
+        {
+            normalColor = background;
+            hoverColor = hover;
+            ForeColor = foreground;
+            Invalidate();
+        }
+
+        protected override void OnMouseEnter(EventArgs args)
+        {
+            hovered = true;
+            Invalidate();
+            base.OnMouseEnter(args);
+        }
+
+        protected override void OnMouseLeave(EventArgs args)
+        {
+            hovered = false;
+            Invalidate();
+            base.OnMouseLeave(args);
+        }
+
+        protected override void OnResize(EventArgs args)
+        {
+            base.OnResize(args);
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width), Math.Max(1, Height));
+            using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, CornerRadius))
+            {
+                Region previous = Region;
+                Region = new Region(path);
+                if (previous != null) previous.Dispose();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs args)
+        {
+            args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
+            Color fillColor = Enabled ? (hovered ? hoverColor : normalColor) : Color.FromArgb(228, 228, 232);
+            Color textColor = Enabled ? ForeColor : Color.FromArgb(142, 142, 147);
+            using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, CornerRadius))
+            using (SolidBrush fill = new SolidBrush(fillColor))
+            {
+                args.Graphics.FillPath(fill, path);
+                TextRenderer.DrawText(args.Graphics, Text, Font, bounds, textColor,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            }
+        }
+    }
+
+    internal sealed class StatusPill : Control
+    {
+        internal Color FillColor { get; set; }
+        internal Color TextColor { get; set; }
+
+        internal StatusPill()
+        {
+            FillColor = Color.FromArgb(231, 247, 239);
+            TextColor = Color.FromArgb(19, 122, 78);
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs args)
+        {
+            args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
+            using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, Height / 2))
+            using (SolidBrush fill = new SolidBrush(FillColor))
+            {
+                args.Graphics.FillPath(fill, path);
+            }
+            TextRenderer.DrawText(args.Graphics, Text, Font, bounds, TextColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+    }
+
+    internal sealed class FanAppIcon : Control
+    {
+        internal FanAppIcon()
+        {
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            BackColor = Color.Transparent;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs args)
+        {
+            args.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(1, 1, Math.Max(1, Width - 3), Math.Max(1, Height - 3));
+            using (GraphicsPath path = AppleGeometry.RoundedRectangle(bounds, 13))
+            using (LinearGradientBrush gradient = new LinearGradientBrush(bounds,
+                Color.FromArgb(87, 170, 255), Color.FromArgb(0, 102, 230), 90f))
+            {
+                args.Graphics.FillPath(gradient, path);
+            }
+
+            args.Graphics.TranslateTransform(Width / 2f, Height / 2f);
+            using (SolidBrush blade = new SolidBrush(Color.FromArgb(235, 255, 255, 255)))
+            {
+                for (int index = 0; index < 4; index++)
+                {
+                    args.Graphics.RotateTransform(90f);
+                    args.Graphics.FillEllipse(blade, -4, -17, 8, 15);
+                }
+                args.Graphics.FillEllipse(blade, -5, -5, 10, 10);
+            }
+            args.Graphics.ResetTransform();
+        }
+    }
+
     internal sealed class MainForm : Form
     {
-        private const string PayloadVersion = "1.2.0";
-        private static readonly Color Navy = Color.FromArgb(20, 38, 63);
-        private static readonly Color Blue = Color.FromArgb(40, 108, 220);
-        private static readonly Color Green = Color.FromArgb(22, 150, 105);
-        private static readonly Color Orange = Color.FromArgb(226, 133, 35);
-        private static readonly Color Red = Color.FromArgb(205, 67, 67);
+        private const string PayloadVersion = "1.3.0";
+        private static readonly Color Navy = Color.FromArgb(29, 29, 31);
+        private static readonly Color Blue = Color.FromArgb(0, 113, 227);
+        private static readonly Color Green = Color.FromArgb(19, 122, 78);
+        private static readonly Color Orange = Color.FromArgb(180, 85, 0);
+        private static readonly Color Red = Color.FromArgb(215, 0, 21);
         private static readonly Color Surface = Color.White;
-        private static readonly Color Canvas = Color.FromArgb(244, 247, 251);
-        private static readonly Color Muted = Color.FromArgb(100, 113, 132);
+        private static readonly Color Canvas = Color.FromArgb(245, 245, 247);
+        private static readonly Color Muted = Color.FromArgb(110, 110, 115);
 
         private readonly Regex samplePattern = new Regex(
             @"(?<time>\d{2}:\d{2}:\d{2})\s*\|\s*(?<temp>-?\d+)\s*C\s*\|\s*Request\s+(?<request>\d+)\s*\|\s*Fan0\s+(?<fan0>\d+)\s*\|\s*Fan1\s+(?<fan1>\d+)",
             RegexOptions.Compiled);
         private readonly Regex ansiPattern = new Regex(@"\x1B\[[0-?]*[ -/]*[@-~]", RegexOptions.Compiled);
 
-        private Label statusLabel;
+        private StatusPill statusLabel;
         private Label temperatureValue;
         private Label fan0Value;
         private Label fan1Value;
@@ -69,8 +252,8 @@ namespace HuaweiFanControl
         {
             Text = "Huawei MateBook Fan Control";
             StartPosition = FormStartPosition.CenterScreen;
-            Size = new Size(1000, 720);
-            MinimumSize = new Size(900, 640);
+            Size = new Size(1040, 760);
+            MinimumSize = new Size(940, 680);
             BackColor = Canvas;
             Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Regular, GraphicsUnit.Point);
             FormClosing += HandleFormClosing;
@@ -129,11 +312,11 @@ namespace HuaweiFanControl
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
             root.RowCount = 5;
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 164));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 158));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             Controls.Add(root);
 
             root.Controls.Add(CreateHeader(), 0, 0);
@@ -147,34 +330,39 @@ namespace HuaweiFanControl
         {
             Panel header = new Panel();
             header.Dock = DockStyle.Fill;
-            header.BackColor = Navy;
-            header.Padding = new Padding(24, 14, 24, 12);
+            header.BackColor = Canvas;
+            header.Padding = new Padding(28, 18, 28, 12);
+
+            FanAppIcon icon = new FanAppIcon();
+            icon.Size = new Size(54, 54);
+            icon.Location = new Point(30, 24);
 
             Label title = new Label();
-            title.Text = "Huawei MateBook Fan Control";
-            title.ForeColor = Color.White;
-            title.Font = new Font("Microsoft YaHei UI", 19f, FontStyle.Bold);
+            title.Text = "Fan Control";
+            title.ForeColor = Navy;
+            title.Font = new Font("Segoe UI Variable Display", 22f, FontStyle.Bold);
             title.AutoSize = true;
-            title.Location = new Point(22, 12);
+            title.Location = new Point(98, 18);
 
             Label subtitle = new Label();
-            subtitle.Text = "MateBook 14 2024 · BIOS/EC 风扇控制 · v1.2.0";
-            subtitle.ForeColor = Color.FromArgb(185, 198, 215);
+            subtitle.Text = "Huawei MateBook 14 2024  ·  BIOS/EC  ·  v1.3.0";
+            subtitle.ForeColor = Muted;
+            subtitle.Font = new Font("Microsoft YaHei UI", 9.2f);
             subtitle.AutoSize = true;
-            subtitle.Location = new Point(25, 52);
+            subtitle.Location = new Point(101, 61);
 
-            statusLabel = new Label();
-            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
-            statusLabel.ForeColor = Color.White;
-            statusLabel.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            statusLabel.Size = new Size(168, 38);
-            statusLabel.Location = new Point(10, 10);
+            statusLabel = new StatusPill();
+            statusLabel.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+            statusLabel.Size = new Size(170, 38);
+            statusLabel.Location = new Point(4, 17);
 
             Panel statusHost = new Panel();
             statusHost.Dock = DockStyle.Right;
-            statusHost.Width = 188;
+            statusHost.Width = 184;
+            statusHost.BackColor = Canvas;
             statusHost.Controls.Add(statusLabel);
 
+            header.Controls.Add(icon);
             header.Controls.Add(title);
             header.Controls.Add(subtitle);
             header.Controls.Add(statusHost);
@@ -186,7 +374,7 @@ namespace HuaweiFanControl
             TableLayoutPanel table = new TableLayoutPanel();
             table.Dock = DockStyle.Fill;
             table.BackColor = Canvas;
-            table.Padding = new Padding(16, 14, 16, 10);
+            table.Padding = new Padding(22, 4, 22, 10);
             table.ColumnCount = 4;
             table.RowCount = 1;
             for (int index = 0; index < 4; index++)
@@ -194,69 +382,90 @@ namespace HuaweiFanControl
                 table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
             }
 
-            table.Controls.Add(CreateMetricCard("CPU 温度", "-- °C", out temperatureValue), 0, 0);
-            table.Controls.Add(CreateMetricCard("风扇 0", "-- RPM", out fan0Value), 1, 0);
-            table.Controls.Add(CreateMetricCard("风扇 1", "-- RPM", out fan1Value), 2, 0);
-            table.Controls.Add(CreateMetricCard("BIOS/EC 请求", "-- RPM", out requestValue), 3, 0);
+            table.Controls.Add(CreateMetricCard("CPU 温度", "-- °C", "实时温度", Blue, out temperatureValue), 0, 0);
+            table.Controls.Add(CreateMetricCard("风扇 0", "-- RPM", "物理转速", Color.FromArgb(94, 92, 230), out fan0Value), 1, 0);
+            table.Controls.Add(CreateMetricCard("风扇 1", "-- RPM", "物理转速", Color.FromArgb(94, 92, 230), out fan1Value), 2, 0);
+            table.Controls.Add(CreateMetricCard("BIOS/EC 请求", "-- RPM", "控制目标", Orange, out requestValue), 3, 0);
             return table;
         }
 
-        private Panel CreateMetricCard(string caption, string initialValue, out Label valueLabel)
+        private RoundedPanel CreateMetricCard(string caption, string initialValue, string footnote, Color accent, out Label valueLabel)
         {
-            Panel card = new Panel();
+            RoundedPanel card = new RoundedPanel();
             card.Dock = DockStyle.Fill;
-            card.Margin = new Padding(7);
-            card.Padding = new Padding(17, 14, 17, 12);
-            card.BackColor = Surface;
-            card.BorderStyle = BorderStyle.FixedSingle;
+            card.Margin = new Padding(7, 5, 7, 7);
+            card.Padding = new Padding(19, 17, 19, 12);
+            card.FillColor = Surface;
+            card.OutlineColor = Color.FromArgb(232, 232, 236);
+            card.CornerRadius = 20;
 
             Label captionLabel = new Label();
             captionLabel.Text = caption;
             captionLabel.ForeColor = Muted;
             captionLabel.Dock = DockStyle.Top;
-            captionLabel.Height = 27;
-            captionLabel.Font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+            captionLabel.Height = 25;
+            captionLabel.Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
+            captionLabel.BackColor = Surface;
+
+            Label footnoteLabel = new Label();
+            footnoteLabel.Text = "●  " + footnote;
+            footnoteLabel.ForeColor = accent;
+            footnoteLabel.Dock = DockStyle.Bottom;
+            footnoteLabel.Height = 25;
+            footnoteLabel.Font = new Font("Microsoft YaHei UI", 8.2f);
+            footnoteLabel.BackColor = Surface;
 
             valueLabel = new Label();
             valueLabel.Text = initialValue;
             valueLabel.ForeColor = Navy;
             valueLabel.Dock = DockStyle.Fill;
             valueLabel.TextAlign = ContentAlignment.MiddleLeft;
-            valueLabel.Font = new Font("Segoe UI", 23f, FontStyle.Bold);
+            valueLabel.Font = new Font("Segoe UI Variable Display", 22f, FontStyle.Bold);
+            valueLabel.BackColor = Surface;
 
             card.Controls.Add(valueLabel);
+            card.Controls.Add(footnoteLabel);
             card.Controls.Add(captionLabel);
             return card;
         }
 
         private Control CreateControls()
         {
+            RoundedPanel shell = new RoundedPanel();
+            shell.Dock = DockStyle.Fill;
+            shell.Margin = new Padding(29, 2, 29, 10);
+            shell.Padding = new Padding(20, 14, 20, 12);
+            shell.FillColor = Surface;
+            shell.OutlineColor = Color.FromArgb(232, 232, 236);
+            shell.CornerRadius = 22;
+
             TableLayoutPanel container = new TableLayoutPanel();
             container.Dock = DockStyle.Fill;
-            container.Padding = new Padding(18, 6, 18, 8);
             container.BackColor = Surface;
             container.ColumnCount = 2;
             container.RowCount = 2;
             container.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            container.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 310));
-            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            container.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+            container.RowStyles.Add(new RowStyle(SizeType.Absolute, 39));
             container.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             Label sectionTitle = new Label();
-            sectionTitle.Text = "运行模式";
-            sectionTitle.Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
+            sectionTitle.Text = "控制模式     选择预设后实时接管，停止时自动恢复原厂控制";
+            sectionTitle.Font = new Font("Microsoft YaHei UI", 10.2f, FontStyle.Bold);
             sectionTitle.ForeColor = Navy;
             sectionTitle.Dock = DockStyle.Fill;
             sectionTitle.TextAlign = ContentAlignment.MiddleLeft;
+            sectionTitle.BackColor = Surface;
 
             FlowLayoutPanel buttons = new FlowLayoutPanel();
             buttons.Dock = DockStyle.Fill;
             buttons.WrapContents = false;
+            buttons.BackColor = Surface;
 
-            monitorButton = CreateButton("仅监测", Color.FromArgb(100, 113, 132), 104);
-            quietButton = CreateButton("安静自动", Blue, 116);
-            fullButton = CreateButton("全速", Orange, 88);
-            stopButton = CreateButton("停止并恢复原厂", Red, 154);
+            monitorButton = CreateButton("仅监测", Color.FromArgb(232, 232, 237), Color.FromArgb(218, 218, 224), Navy, 100);
+            quietButton = CreateButton("安静自动", Blue, Color.FromArgb(0, 96, 205), Color.White, 114);
+            fullButton = CreateButton("全速", Navy, Color.FromArgb(60, 60, 64), Color.White, 86);
+            stopButton = CreateButton("停止并恢复原厂", Color.FromArgb(255, 232, 231), Color.FromArgb(255, 218, 216), Red, 150);
             monitorButton.Click += delegate { StartController("Monitor"); };
             quietButton.Click += delegate { StartController("Quiet"); };
             fullButton.Click += delegate { StartController("Full"); };
@@ -270,26 +479,31 @@ namespace HuaweiFanControl
             settings.Dock = DockStyle.Fill;
             settings.WrapContents = false;
             settings.FlowDirection = FlowDirection.LeftToRight;
-            settings.Padding = new Padding(4, 2, 0, 0);
+            settings.Padding = new Padding(2, 0, 0, 0);
+            settings.BackColor = Surface;
 
             Label durationLabel = new Label();
             durationLabel.Text = "全速分钟\n0 = 无限";
             durationLabel.ForeColor = Muted;
-            durationLabel.Size = new Size(68, 46);
+            durationLabel.Size = new Size(65, 48);
             durationLabel.TextAlign = ContentAlignment.MiddleLeft;
+            durationLabel.BackColor = Surface;
 
             fullSpeedMinutes = new NumericUpDown();
             fullSpeedMinutes.Minimum = 0;
             fullSpeedMinutes.Maximum = 1440;
             fullSpeedMinutes.Value = 5;
-            fullSpeedMinutes.Size = new Size(62, 30);
+            fullSpeedMinutes.Size = new Size(60, 30);
             fullSpeedMinutes.Margin = new Padding(0, 10, 12, 0);
+            fullSpeedMinutes.BackColor = Color.FromArgb(247, 247, 249);
+            fullSpeedMinutes.BorderStyle = BorderStyle.FixedSingle;
 
             Label emergencyLabel = new Label();
             emergencyLabel.Text = "紧急温度\n°C";
             emergencyLabel.ForeColor = Muted;
-            emergencyLabel.Size = new Size(58, 46);
+            emergencyLabel.Size = new Size(57, 48);
             emergencyLabel.TextAlign = ContentAlignment.MiddleLeft;
+            emergencyLabel.BackColor = Surface;
 
             emergencyTemperature = new NumericUpDown();
             emergencyTemperature.Minimum = 75;
@@ -297,6 +511,8 @@ namespace HuaweiFanControl
             emergencyTemperature.Value = 85;
             emergencyTemperature.Size = new Size(58, 30);
             emergencyTemperature.Margin = new Padding(0, 10, 0, 0);
+            emergencyTemperature.BackColor = Color.FromArgb(247, 247, 249);
+            emergencyTemperature.BorderStyle = BorderStyle.FixedSingle;
 
             settings.Controls.Add(durationLabel);
             settings.Controls.Add(fullSpeedMinutes);
@@ -306,46 +522,48 @@ namespace HuaweiFanControl
             container.SetColumnSpan(sectionTitle, 2);
             container.Controls.Add(buttons, 0, 1);
             container.Controls.Add(settings, 1, 1);
-            return container;
+            shell.Controls.Add(container);
+            return shell;
         }
 
-        private Button CreateButton(string text, Color color, int width)
+        private Button CreateButton(string text, Color background, Color hover, Color foreground, int width)
         {
-            Button button = new Button();
+            RoundedButton button = new RoundedButton();
             button.Text = text;
-            button.Size = new Size(width, 46);
-            button.Margin = new Padding(5, 3, 5, 3);
-            button.FlatStyle = FlatStyle.Flat;
-            button.FlatAppearance.BorderSize = 0;
-            button.BackColor = color;
-            button.ForeColor = Color.White;
-            button.Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            button.Size = new Size(width, 44);
+            button.Margin = new Padding(4, 4, 4, 3);
+            button.Font = new Font("Microsoft YaHei UI", 9.2f, FontStyle.Bold);
             button.Cursor = Cursors.Hand;
+            button.SetPalette(background, hover, foreground);
             return button;
         }
 
         private Control CreateLogPanel()
         {
-            Panel panel = new Panel();
+            RoundedPanel panel = new RoundedPanel();
             panel.Dock = DockStyle.Fill;
-            panel.Padding = new Padding(22, 8, 22, 12);
-            panel.BackColor = Canvas;
+            panel.Margin = new Padding(29, 2, 29, 8);
+            panel.Padding = new Padding(19, 12, 19, 15);
+            panel.FillColor = Surface;
+            panel.OutlineColor = Color.FromArgb(232, 232, 236);
+            panel.CornerRadius = 22;
 
             Label title = new Label();
-            title.Text = "运行日志";
+            title.Text = "活动记录";
             title.Dock = DockStyle.Top;
-            title.Height = 30;
-            title.Font = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
+            title.Height = 32;
+            title.Font = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
             title.ForeColor = Navy;
+            title.BackColor = Surface;
 
             logBox = new RichTextBox();
             logBox.Dock = DockStyle.Fill;
             logBox.ReadOnly = true;
             logBox.ScrollBars = RichTextBoxScrollBars.Vertical;
-            logBox.BackColor = Color.FromArgb(18, 27, 40);
-            logBox.ForeColor = Color.FromArgb(213, 224, 237);
+            logBox.BackColor = Color.FromArgb(250, 250, 252);
+            logBox.ForeColor = Color.FromArgb(66, 66, 69);
             logBox.BorderStyle = BorderStyle.None;
-            logBox.Font = new Font("Consolas", 9.5f);
+            logBox.Font = new Font("Consolas", 9.2f);
             logBox.Margin = new Padding(0);
 
             panel.Controls.Add(logBox);
@@ -358,9 +576,10 @@ namespace HuaweiFanControl
             Label footer = new Label();
             footer.Dock = DockStyle.Fill;
             footer.TextAlign = ContentAlignment.MiddleCenter;
-            footer.BackColor = Color.FromArgb(230, 237, 246);
+            footer.BackColor = Canvas;
             footer.ForeColor = Muted;
-            footer.Text = "85°C 默认紧急恢复  ·  双风扇转速计保护  ·  独立 watchdog  ·  关闭窗口时恢复原厂控制";
+            footer.Font = new Font("Microsoft YaHei UI", 8.6f);
+            footer.Text = "85°C 默认紧急恢复    ·    双风扇转速计保护    ·    独立 watchdog    ·    关闭窗口时恢复原厂控制";
             return footer;
         }
 
@@ -595,7 +814,7 @@ namespace HuaweiFanControl
                 logBox.Text = logBox.Text.Substring(logBox.TextLength - 30000);
             }
             logBox.SelectionStart = logBox.TextLength;
-            logBox.SelectionColor = isError ? Color.FromArgb(255, 145, 145) : Color.FromArgb(213, 224, 237);
+            logBox.SelectionColor = isError ? Red : Color.FromArgb(66, 66, 69);
             logBox.AppendText(formatted);
             logBox.SelectionStart = logBox.TextLength;
             logBox.ScrollToCaret();
@@ -604,7 +823,12 @@ namespace HuaweiFanControl
         private void SetStatus(string text, Color color)
         {
             statusLabel.Text = text;
-            statusLabel.BackColor = color;
+            statusLabel.FillColor = Color.FromArgb(
+                (color.R + 255 * 7) / 8,
+                (color.G + 255 * 7) / 8,
+                (color.B + 255 * 7) / 8);
+            statusLabel.TextColor = color;
+            statusLabel.Invalidate();
         }
 
         private void SetRunningControls(bool running)

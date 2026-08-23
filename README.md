@@ -21,6 +21,8 @@
 
 从 GitHub Releases 下载 `HuaweiFanControlUI.exe`，双击并批准 UAC 即可使用，不需要安装或放置额外脚本。
 
+v1.3.0 使用偏 macOS 的浅色设计：圆角卡片、胶囊状态、简洁配色和高 DPI 自适应，同时保留 Windows 原生标题栏与窗口操作。
+
 界面提供四个操作：
 
 - `仅监测`：只读取 CPU 温度与双风扇转速，不接管风扇。
@@ -132,7 +134,7 @@ cd '.\huawei-matebook-fancontrol'
 
 运行日志写入本地 `runtime` 目录，该目录不会提交到 Git。仓库不包含 BIOS 镜像、ACPI 提取物、设备序列号或电源设置快照。
 
-EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.2.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
+EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.3.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
 
 ## 构建 EXE
 

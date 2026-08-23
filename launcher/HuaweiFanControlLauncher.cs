@@ -9,14 +9,14 @@ using System.Threading;
 [assembly: AssemblyDescription("Launcher for the watchdog-backed Huawei MateBook fan controller")]
 [assembly: AssemblyCompany("HuaweiFanControl community project")]
 [assembly: AssemblyProduct("Huawei MateBook Fan Control")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace HuaweiFanControl
 {
     internal static class Program
     {
-        private const string PayloadVersion = "1.2.0";
+        private const string PayloadVersion = "1.3.0";
 
         private sealed class Options
         {

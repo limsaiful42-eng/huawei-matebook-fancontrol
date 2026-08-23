@@ -56,4 +56,11 @@
 - 安全退出：控制器确认进入手动模式并启动独立 watchdog；UI 定时发出停止信号后，总结中 `RestoreSucceeded=True`，watchdog 收到正常停止信号，UI 和所有子进程自行退出。
 - 打包：GUI 内嵌控制器、watchdog、原厂恢复脚本和两条曲线，版本 1.2.0.0；运行时不需要外部 PowerShell 脚本。
 
+### v1.3.0 视觉重构复验
+
+- 高 DPI 截图中，macOS 风格的浅灰画布、四张圆角指标卡、胶囊状态、圆角操作按钮、设置项与浅色日志区均无裁切或重叠，同时保留 Windows 原生标题栏。
+- 由重构后的 UI 运行安静自动模式 30 秒，记录 13 个样本，温度 62–63 °C，末端请求 3800 RPM，双风扇末端均为 3840 RPM。
+- 控制器确认 `ManualModeEntered=True`、`WatchdogStarted=True`、`RestoreSucceeded=True`，watchdog 收到正常停止信号，退出后无 UI、控制器或 watchdog 残留进程。
+- GUI 与 CLI 版本一致更新为 1.3.0.0，内嵌资源释放至独立的 `payload-1.3.0` 目录。
+
 项目没有写未知 EC RAM、没有修改 BIOS 镜像、没有刷写固件，也没有关闭 Secure Boot 或启用测试签名。
