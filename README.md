@@ -17,7 +17,20 @@
 
 ## 运行
 
-### 单文件 EXE
+### 图形界面（推荐）
+
+从 GitHub Releases 下载 `HuaweiFanControlUI.exe`，双击并批准 UAC 即可使用，不需要安装或放置额外脚本。
+
+界面提供四个操作：
+
+- `仅监测`：只读取 CPU 温度与双风扇转速，不接管风扇。
+- `安静自动`：使用已验收的温控曲线。
+- `全速`：向 BIOS/EC 请求最高档；可设置分钟数，`0` 表示不限时。
+- `停止并恢复原厂`：安全退出手动模式，让 BIOS 原厂策略重新接管。
+
+运行中会实时显示 CPU 温度、Fan 0/Fan 1 物理转速、BIOS/EC 请求值和控制器日志。关闭正在控制风扇的窗口时，UI 会先等待原厂控制恢复。
+
+### 命令行 EXE
 
 从 GitHub Releases 下载 `HuaweiFanControl.exe`，双击后批准 UAC 即可运行安静自动曲线。EXE 内嵌控制器、watchdog 和默认曲线，不需要把 PowerShell 脚本放在旁边。
 
@@ -119,7 +132,7 @@ cd '.\huawei-matebook-fancontrol'
 
 运行日志写入本地 `runtime` 目录，该目录不会提交到 Git。仓库不包含 BIOS 镜像、ACPI 提取物、设备序列号或电源设置快照。
 
-EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.1.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
+EXE 会将内嵌资源释放到 `%LOCALAPPDATA%\HuaweiFanControl\payload-1.2.0`，运行日志保存在该目录下的 `runtime`。不再需要时可以在控制器停止后删除整个 `%LOCALAPPDATA%\HuaweiFanControl` 目录。
 
 ## 构建 EXE
 
@@ -129,4 +142,4 @@ Windows 自带 .NET Framework C# 编译器即可构建，不需要下载第三�
 .\Build-Exe.ps1
 ```
 
-输出位于 `dist\HuaweiFanControl.exe`，同时生成 SHA-256 校验文件。启动器源码和管理员权限清单位于 `launcher` 目录；构建时会把当前控制器、watchdog 和两条曲线作为资源嵌入 EXE。
+输出位于 `dist\HuaweiFanControlUI.exe` 和 `dist\HuaweiFanControl.exe`，同时为两者生成 SHA-256 校验文件。启动器源码和管理员权限清单位于 `launcher` 目录；构建时会把当前控制器、watchdog 和两条曲线作为资源嵌入 EXE。

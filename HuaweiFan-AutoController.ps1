@@ -16,6 +16,8 @@ param(
     [ValidateRange(75, 95)]
     [int] $EmergencyTemperatureC = 85,
 
+    [string] $StopSignalPath,
+
     [switch] $Apply
 )
 
@@ -47,6 +49,17 @@ $currentPointIndex = -1
 $downshiftSamples = 0
 $lowTachSamples = 0
 $startedAt = Get-Date
+$controllerMutex = [System.Threading.Mutex]::new($false, 'Global\HuaweiMateBookFanControlController')
+$controllerMutexOwned = $false
+try {
+    $controllerMutexOwned = $controllerMutex.WaitOne(0, $false)
+}
+catch [System.Threading.AbandonedMutexException] {
+    $controllerMutexOwned = $true
+}
+if (-not $controllerMutexOwned) {
+    throw 'Another Huawei fan controller is already running.'
+}
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -220,6 +233,10 @@ try {
     }
 
     while ($true) {
+        if ($StopSignalPath -and (Test-Path -LiteralPath $StopSignalPath)) {
+            Write-Host 'External stop signal received; restoring vendor control.' -ForegroundColor Yellow
+            break
+        }
         if ($MaxMinutes -gt 0 -and ((Get-Date) - $startedAt).TotalMinutes -ge $MaxMinutes) {
             break
         }
@@ -322,6 +339,13 @@ finally {
         if ($watchdogProcess) {
             $watchdogProcess.WaitForExit(5000) | Out-Null
         }
+    }
+    if ($controllerMutexOwned) {
+        try { $controllerMutex.ReleaseMutex() } catch { }
+        $controllerMutexOwned = $false
+    }
+    if ($controllerMutex) {
+        $controllerMutex.Dispose()
     }
 }
 

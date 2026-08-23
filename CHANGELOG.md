@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 - 2026-08-23
+
+- Add a single-file Windows Forms GUI with live CPU temperature, both fan tachometers, BIOS/EC request, and logs.
+- Add monitor-only, quiet automatic, timed full-speed, safe stop, and explicit vendor-restore controls.
+- Add configurable full-speed duration and emergency-temperature controls.
+- Add an external safe-stop signal and a global single-controller mutex.
+- Verify the GUI at high DPI and complete an active-control test with 13 samples, watchdog startup, safe stop, and successful vendor-mode restoration.
+
 ## 1.1.0 - 2026-08-23
 
 - Add a single-file `HuaweiFanControl.exe` launcher with embedded controller, watchdog, and default curves.

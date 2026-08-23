@@ -19,12 +19,15 @@ if (-not $compiler) {
 }
 
 $sourcePath = Join-Path $PSScriptRoot 'launcher\HuaweiFanControlLauncher.cs'
+$uiSourcePath = Join-Path $PSScriptRoot 'launcher\HuaweiFanControlUI.cs'
 $manifestPath = Join-Path $PSScriptRoot 'launcher\app.manifest'
+$uiManifestPath = Join-Path $PSScriptRoot 'launcher\ui.manifest'
 $controllerPath = Join-Path $PSScriptRoot 'HuaweiFan-AutoController.ps1'
 $watchdogPath = Join-Path $PSScriptRoot 'HuaweiFan-Watchdog.ps1'
+$restorePath = Join-Path $PSScriptRoot 'Restore-HuaweiFanVendorControl.ps1'
 $quietCurvePath = Join-Path $PSScriptRoot 'quiet-balanced-curve.json'
 $fullCurvePath = Join-Path $PSScriptRoot 'full-speed-curve.json'
-foreach ($requiredPath in @($sourcePath, $manifestPath, $controllerPath, $watchdogPath, $quietCurvePath, $fullCurvePath)) {
+foreach ($requiredPath in @($sourcePath, $uiSourcePath, $manifestPath, $uiManifestPath, $controllerPath, $watchdogPath, $restorePath, $quietCurvePath, $fullCurvePath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required build input was not found: $requiredPath"
     }
@@ -32,7 +35,8 @@ foreach ($requiredPath in @($sourcePath, $manifestPath, $controllerPath, $watchd
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $outputPath = Join-Path $OutputDirectory 'HuaweiFanControl.exe'
-$arguments = @(
+$uiOutputPath = Join-Path $OutputDirectory 'HuaweiFanControlUI.exe'
+$cliArguments = @(
     '/nologo',
     '/target:exe',
     '/platform:anycpu',
@@ -45,19 +49,42 @@ $arguments = @(
     "/resource:$fullCurvePath,HuaweiFanControl.Resources.FullSpeedCurve.json",
     $sourcePath
 )
-& $compiler @arguments
+& $compiler @cliArguments
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $outputPath)) {
-    throw "C# compiler failed with exit code $LASTEXITCODE."
+    throw "CLI C# compiler failed with exit code $LASTEXITCODE."
 }
 
-$hash = Get-FileHash -LiteralPath $outputPath -Algorithm SHA256
-$checksumPath = "$outputPath.sha256"
-('{0}  {1}' -f $hash.Hash, (Split-Path $outputPath -Leaf)) |
-    Out-File -LiteralPath $checksumPath -Encoding ascii -Force
-[pscustomobject]@{
-    OutputPath = $outputPath
-    Length = (Get-Item -LiteralPath $outputPath).Length
-    SHA256 = $hash.Hash
-    ChecksumPath = $checksumPath
-    Compiler = $compiler
+$uiArguments = @(
+    '/nologo',
+    '/target:winexe',
+    '/platform:anycpu',
+    '/optimize+',
+    '/reference:System.Windows.Forms.dll',
+    '/reference:System.Drawing.dll',
+    "/win32manifest:$uiManifestPath",
+    "/out:$uiOutputPath",
+    "/resource:$controllerPath,HuaweiFanControl.Resources.Controller.ps1",
+    "/resource:$watchdogPath,HuaweiFanControl.Resources.Watchdog.ps1",
+    "/resource:$restorePath,HuaweiFanControl.Resources.Restore.ps1",
+    "/resource:$quietCurvePath,HuaweiFanControl.Resources.QuietCurve.json",
+    "/resource:$fullCurvePath,HuaweiFanControl.Resources.FullSpeedCurve.json",
+    $uiSourcePath
+)
+& $compiler @uiArguments
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $uiOutputPath)) {
+    throw "UI C# compiler failed with exit code $LASTEXITCODE."
+}
+
+foreach ($builtPath in @($outputPath, $uiOutputPath)) {
+    $hash = Get-FileHash -LiteralPath $builtPath -Algorithm SHA256
+    $checksumPath = "$builtPath.sha256"
+    ('{0}  {1}' -f $hash.Hash, (Split-Path $builtPath -Leaf)) |
+        Out-File -LiteralPath $checksumPath -Encoding ascii -Force
+    [pscustomobject]@{
+        OutputPath = $builtPath
+        Length = (Get-Item -LiteralPath $builtPath).Length
+        SHA256 = $hash.Hash
+        ChecksumPath = $checksumPath
+        Compiler = $compiler
+    }
 }
